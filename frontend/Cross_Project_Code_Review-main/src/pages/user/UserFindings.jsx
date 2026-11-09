@@ -197,6 +197,7 @@ export default function UserFindings() {
                   <th>Label</th>
                   <th>Severity</th>
                   <th>Status</th>
+                  <th>Assigned Date</th>
                   <th>Accepted Date</th>
                   <th>Due Date</th>
                 </tr>
@@ -205,7 +206,7 @@ export default function UserFindings() {
               <tbody>
                 {findingsLoading ? (
                   <tr>
-                    <td colSpan="8" className="empty-cell">
+                    <td colSpan="9" className="empty-cell">
                       Loading findings...
                     </td>
                   </tr>
@@ -252,6 +253,12 @@ export default function UserFindings() {
                         </td>
 
                         <td>
+                          {finding.assignedDate && !isNaN(new Date(finding.assignedDate).getTime())
+                            ? new Date(finding.assignedDate).toLocaleDateString()
+                            : (finding.created || '—')}
+                        </td>
+
+                        <td>
                           {finding.acceptedDate && !isNaN(new Date(finding.acceptedDate).getTime())
                             ? new Date(finding.acceptedDate).toLocaleString()
                             : 'Not accepted'}
@@ -269,10 +276,10 @@ export default function UserFindings() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="8" className="empty-cell">
+                    <td colSpan="9" className="empty-cell">
                       {findingsError
                         ? 'Findings could not be loaded.'
-                        : mine.length === 0
+                        : findings.length === 0
                           ? 'No findings are currently assigned to you.'
                           : 'No findings match these filters.'}
                     </td>

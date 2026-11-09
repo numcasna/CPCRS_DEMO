@@ -17,8 +17,13 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: UserRole
     is_active: bool
+    avatar: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AvatarUploadRequest(BaseModel):
+    avatar: str = Field(min_length=1)
 
 
 class TokenResponse(BaseModel):
@@ -32,3 +37,8 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
     role: UserRole = UserRole.developer
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)

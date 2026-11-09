@@ -25,14 +25,20 @@ def main():
             admin = User(name="Demo Admin", email="admin@example.com",
                          password_hash=pwd.hash("ChangeMe_Admin_123!"), role=UserRole.admin)
             db.add(admin)
+        else:
+            admin.password_hash = pwd.hash("ChangeMe_Admin_123!")
         if dev is None:
             dev = User(name="Demo Developer", email="developer@example.com",
-                       password_hash=pwd.hash("ChangeMe_Dev_123!"), role=UserRole.developer)
+                         password_hash=pwd.hash("ChangeMe_Dev_123!"), role=UserRole.developer)
             db.add(dev)
+        else:
+            dev.password_hash = pwd.hash("ChangeMe_Dev_123!")
         if dev2 is None:
             dev2 = User(name="Developer 2", email="developer2@test.com",
-                        password_hash=pwd.hash("Dev2Test@2026"), role=UserRole.developer)
+                         password_hash=pwd.hash("Dev2Test@2026"), role=UserRole.developer)
             db.add(dev2)
+        else:
+            dev2.password_hash = pwd.hash("Dev2Test@2026")
         db.flush()
 
         project = db.scalar(select(Project).where(Project.name == "Demo Code Review"))
@@ -42,6 +48,11 @@ def main():
                               project_lead_id=dev.id, created_by=admin.id)
             db.add(project)
             db.flush()
+        else:
+            if project.deleted_at is not None:
+                project.deleted_at = None
+                project.is_active = True
+                db.flush()
         for uid in (admin.id, dev.id, dev2.id):
             if db.get(ProjectMember, (project.id, uid)) is None:
                 db.add(ProjectMember(project_id=project.id, user_id=uid, added_by=admin.id))

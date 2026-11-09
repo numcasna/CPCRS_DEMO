@@ -2,13 +2,16 @@ import unittest
 from sqlalchemy import select
 from passlib.context import CryptContext
 from app.database import SessionLocal
-from app.models import User, Project, ProjectMember
+from app.models import User, Project, ProjectMember, Repository
 from app.models.entities import UserRole
 import seed
 
 pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 
 class TestSeedDeveloper2(unittest.TestCase):
+    def setUp(self):
+        seed.main()
+
     def test_developer2_is_seeded(self):
         # Run the seed function
         seed.main()
@@ -98,7 +101,7 @@ class TestSeedDeveloper2(unittest.TestCase):
 
         # Find finding in Demo Code Review
         with SessionLocal() as db:
-            finding = db.scalar(select(Finding))
+            finding = db.scalar(select(Finding).where(Finding.finding_code == "CRF-2026-0001"))
             self.assertIsNotNone(finding)
             finding_id = str(finding.id)
 
@@ -533,6 +536,151 @@ class TestSeedDeveloper2(unittest.TestCase):
         get_res = client.get(f"/findings/{created_data['id']}", headers=admin_h)
         self.assertEqual(get_res.status_code, 200)
         self.assertEqual(get_res.json()["category"], custom_label)
+
+    def test_finding_assigned_at_and_accepted_at(self):
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+
+        admin_login = client.post("/auth/login", json={"email": "admin@example.com", "password": "ChangeMe_Admin_123!"})
+        admin_h = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+        dev_login = client.post("/auth/login", json={"email": "developer@example.com", "password": "ChangeMe_Dev_123!"})
+        dev_h = {"Authorization": f"Bearer {dev_login.json()['access_token']}"}
+
+        with SessionLocal() as db:
+            p = db.scalar(select(Project).where(Project.name == "Demo Code Review"))
+            repo = db.scalar(select(Repository).where(Repository.project_id == p.id))
+            dev = db.scalar(select(User).where(User.email == "developer@example.com"))
+            pid, rid, did = str(p.id), str(repo.id), str(dev.id)
+
+        # 1. Create finding -> assigned_at is populated, accepted_at is None
+        create_res = client.post("/findings", headers=admin_h, json={
+            "title": "Assigned and Accepted Date Test",
+            "description": "Testing date fields",
+            "project_id": pid,
+            "repository_id": rid,
+            "severity": "Medium",
+            "category": "Testing",
+            "assignee_id": did,
+            "due_date": "2026-12-01"
+        })
+        self.assertEqual(create_res.status_code, 201)
+        finding_data = create_res.json()
+        fid = finding_data["id"]
+
+        self.assertIsNotNone(finding_data.get("assigned_at"))
+        self.assertIsNone(finding_data.get("accepted_at"))
+
+        # 2. Developer accepts the finding -> moves to In Progress
+        accept_res = client.patch(f"/findings/{fid}/status", headers=dev_h, json={"status": "In Progress"})
+        self.assertEqual(accept_res.status_code, 200)
+
+        # 3. GET /findings/{id} returns populated accepted_at and assigned_at
+        get_res = client.get(f"/findings/{fid}", headers=admin_h)
+        self.assertEqual(get_res.status_code, 200)
+        detail_data = get_res.json()
+        self.assertIsNotNone(detail_data.get("assigned_at"))
+        self.assertIsNotNone(detail_data.get("accepted_at"))
+
+        # 4. GET /findings list endpoint returns both dates as well
+        list_res = client.get(f"/findings?project_id={pid}", headers=admin_h)
+        self.assertEqual(list_res.status_code, 200)
+        matching = [f for f in list_res.json() if f["id"] == fid]
+        self.assertEqual(len(matching), 1)
+        self.assertIsNotNone(matching[0].get("assigned_at"))
+        self.assertIsNotNone(matching[0].get("accepted_at"))
+
+    def test_change_password_full_lifecycle(self):
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+
+        # 1. Login with original password
+        login_res = client.post("/auth/login", json={"email": "developer2@test.com", "password": "Dev2Test@2026"})
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Attempt change with wrong current password -> 400
+        bad_cur = client.post("/auth/change-password", headers=headers, json={
+            "current_password": "WrongPassword123!",
+            "new_password": "BrandNewDev2Pass!2026"
+        })
+        self.assertEqual(bad_cur.status_code, 400)
+        self.assertIn("Current password is incorrect", bad_cur.text)
+
+        # 3. Attempt change without authentication -> 401
+        unauth = client.post("/auth/change-password", json={
+            "current_password": "Dev2Test@2026",
+            "new_password": "BrandNewDev2Pass!2026"
+        })
+        self.assertEqual(unauth.status_code, 401)
+
+        # 4. Attempt change with identical new password -> 400
+        same_pass = client.post("/auth/change-password", headers=headers, json={
+            "current_password": "Dev2Test@2026",
+            "new_password": "Dev2Test@2026"
+        })
+        self.assertEqual(same_pass.status_code, 400)
+
+        # 5. Successfully change password
+        ok_res = client.post("/auth/change-password", headers=headers, json={
+            "current_password": "Dev2Test@2026",
+            "new_password": "BrandNewDev2Pass!2026"
+        })
+        self.assertEqual(ok_res.status_code, 200)
+        self.assertTrue(ok_res.json().get("ok"))
+
+        # 6. Verify old password no longer works
+        old_login = client.post("/auth/login", json={"email": "developer2@test.com", "password": "Dev2Test@2026"})
+        self.assertEqual(old_login.status_code, 401)
+
+        # 7. Verify new password logs in successfully
+        new_login = client.post("/auth/login", json={"email": "developer2@test.com", "password": "BrandNewDev2Pass!2026"})
+        self.assertEqual(new_login.status_code, 200)
+        new_token = new_login.json()["access_token"]
+        new_headers = {"Authorization": f"Bearer {new_token}"}
+
+        # 8. Revert back to original password to keep test environment deterministic
+        revert_res = client.post("/auth/change-password", headers=new_headers, json={
+            "current_password": "BrandNewDev2Pass!2026",
+            "new_password": "Dev2Test@2026"
+        })
+        self.assertEqual(revert_res.status_code, 200)
+
+    def test_avatar_upload_and_persistence(self):
+        import base64
+        from fastapi.testclient import TestClient
+        from main import app
+        client = TestClient(app)
+
+        # 1. Login
+        login_res = client.post("/auth/login", json={"email": "developer@example.com", "password": "ChangeMe_Dev_123!"})
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["access_token"]
+        uid = login_res.json()["user"]["id"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Upload avatar as base64 data URL
+        # Minimal 1x1 transparent PNG
+        png_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        b64_png = "data:image/png;base64," + base64.b64encode(png_1x1).decode()
+
+        upload_res = client.post("/auth/avatar", headers=headers, json={"avatar": b64_png})
+        self.assertEqual(upload_res.status_code, 200)
+        self.assertTrue(upload_res.json().get("ok"))
+        self.assertIn("avatar", upload_res.json())
+
+        # 3. Download avatar from public endpoint
+        dl_res = client.get(f"/auth/avatar/{uid}")
+        self.assertEqual(dl_res.status_code, 200)
+        self.assertEqual(dl_res.headers["content-type"], "image/png")
+        self.assertEqual(dl_res.content, png_1x1)
+
+        # 4. Login again and ensure avatar is persisted in user response
+        login_again = client.post("/auth/login", json={"email": "developer@example.com", "password": "ChangeMe_Dev_123!"})
+        self.assertEqual(login_again.status_code, 200)
+        self.assertIsNotNone(login_again.json()["user"].get("avatar"))
 
 if __name__ == "__main__":
     unittest.main()

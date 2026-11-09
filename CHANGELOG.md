@@ -283,5 +283,105 @@
 - **Functionality Changed**:
   - Admins can now type custom labels directly when creating a finding, or manage custom labels in workspace settings. Custom labels automatically appear across all dropdowns and filters.
 
+---
+
+## Entry 8: Assigned Date & Accepted Date Tracking & Visibility (TDD)
+- **Date/Timestamp**: 2026-11-09
+- **Author**: Antigravity (Pair Programming with User)
+
+### Files Changed:
+
+#### 1. `backend/app/models/entities.py` & `backend/app/schemas/findings.py`
+- **Modifications**:
+  - Added `@property def assigned_at` to `Finding` model resolving latest assignment timestamp from status history (or falling back to `created_at`).
+  - Added `@property def accepted_at` to `Finding` model resolving the timestamp when developer transitioned finding to `In Progress` (or status history transition).
+  - Added `assigned_at` and `accepted_at` fields to `FindingResponse` and `FindingDetailResponse` Pydantic schemas.
+
+#### 2. `backend/app/api/routes/findings.py`
+- **Modifications**:
+  - Added `.options(selectinload(Finding.status_history))` to `list_findings` to eager load status transitions without N+1 queries.
+
+#### 3. `backend/test_seed.py`
+- **Modifications**:
+  - Added regression test `test_finding_assigned_at_and_accepted_at` verifying that `assigned_at` is returned at creation and `accepted_at` is populated upon developer acceptance. Suite extended to 16 passing unit tests.
+
+#### 4. `frontend/Cross_Project_Code_Review-main/src/pages/admin/FindingDetail.jsx`
+- **Modifications**:
+  - Merged redundant "Created Date" and "Assigned Date" into a single "Assigned Date" info card (`Created` remains visible in the header badge).
+  - Populated "Accepted Date" from backend `accepted_at` and `status_history`. When accepted by developer, displays exact formatted timestamp; when open, displays `"Not accepted yet"`.
+
+#### 5. `frontend/Cross_Project_Code_Review-main/src/pages/admin/AdminFindings.jsx` & `UserFindings.jsx`
+- **Modifications**:
+  - Aligned table columns: replaced separate `Created Date` and `Assigned Date` columns with `Assigned Date` and added `Accepted Date`. Both dates are now visible across Admin and Developer findings tables.
+
+---
+
+## Entry 9: Connected Password Change with Visibility Toggles (TDD)
+- **Date/Timestamp**: 2026-11-09
+- **Author**: Antigravity (Pair Programming with User)
+
+### Files Changed:
+
+#### 1. `backend/app/schemas/auth.py`
+- **Modifications**:
+  - Added `ChangePasswordRequest` schema requiring `current_password` and `new_password` (min. 6 characters).
+
+#### 2. `backend/app/api/routes/auth.py`
+- **Modifications**:
+  - Implemented `POST /auth/change-password`: verifies current Argon2 password hash, validates that new password differs from current, re-hashes using Argon2, and commits to the database.
+
+#### 3. `backend/test_seed.py`
+- **Modifications**:
+  - Added unit test `test_change_password_full_lifecycle` asserting wrong current password handling (400), unauthenticated rejection (401), identical password prevention (400), successful update (200), login with new password (200), and login rejection with old password (401).
+
+#### 4. `frontend/Cross_Project_Code_Review-main/src/context/AuthContext.jsx`
+- **Modifications**:
+  - Connected `changePassword()` to `POST /auth/change-password` via `apiRequest()`, replacing the mock placeholder.
+
+#### 5. `frontend/Cross_Project_Code_Review-main/src/pages/Settings.jsx` & `Icon.jsx` & `index.css`
+- **Modifications**:
+  - Added `eye` and `eyeOff` SVG icons.
+  - Added eye view/hide toggle buttons inside the Current Password, New Password, and Confirm New Password input fields.
+  - Added client-side matching validation, length checks, and loading state to the Change Password form.
+
+---
+
+## Entry 10: Persistent Profile Picture Across Reloads and Logins (TDD)
+- **Date/Timestamp**: 2026-11-09
+- **Author**: Antigravity (Pair Programming with User)
+
+### Files Changed:
+
+#### 1. `backend/app/models/entities.py`
+- **Modifications**:
+  - Added dynamic `@property def avatar(self) -> str | None` on the `User` model. It checks for the existence of `uploads/avatars/{user_id}.png` and returns a cache-busted URL `http://127.0.0.1:8000/auth/avatar/{user_id}?v={mtime}`.
+
+#### 2. `backend/app/schemas/auth.py`
+- **Modifications**:
+  - Added `avatar: str | None = None` to `UserResponse`.
+  - Added `AvatarUploadRequest` schema validating base64 payload.
+
+#### 3. `backend/app/api/routes/auth.py`
+- **Modifications**:
+  - Added `POST /auth/avatar`: decodes base64 payload, enforces a 5MB size limit, writes file to disk at `backend/uploads/avatars/{user_id}.png`, and returns the persistent avatar URL with `v={mtime}`.
+  - Added `GET /auth/avatar/{user_id}`: streams the avatar image file with `image/png` content-type and `Cache-Control: no-cache, must-revalidate` headers.
+
+#### 4. `backend/test_seed.py`
+- **Modifications**:
+  - Added `test_avatar_upload_and_persistence` asserting end-to-end upload via `POST /auth/avatar`, direct download via `GET /auth/avatar/{user_id}`, and persistence in `POST /auth/login` user response. Test suite extended to 18 passing tests.
+
+#### 5. `frontend/Cross_Project_Code_Review-main/src/context/AuthContext.jsx`
+- **Modifications**:
+  - Updated `updateProfilePicture(avatar)` to post base64 avatar to `/auth/avatar` while concurrently synchronizing `localStorage` under `user_profile` and per-user key `user_avatar_${userId}`.
+  - Updated `login()` to preserve and restore `user.avatar` on login.
+
+#### 6. `frontend/Cross_Project_Code_Review-main/src/pages/Settings.jsx`
+- **Modifications**:
+  - Made `savePicture()` asynchronous with loading state indicator (`disabled` and `"Saving..."`), error handling, and toast notification `"Profile picture updated and saved."`.
+  - Added `useEffect` hook to ensure avatar preview synchronizes whenever `currentUser.avatar` updates.
+
+
+
+
 
 

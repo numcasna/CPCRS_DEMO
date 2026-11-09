@@ -58,6 +58,8 @@ class FindingResponse(BaseModel):
     reviewer_id: uuid.UUID | None
     created_by: uuid.UUID
     created_at: datetime
+    assigned_at: datetime | None = None
+    accepted_at: datetime | None = None
     due_date: date
     updated_at: datetime
 

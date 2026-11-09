@@ -211,6 +211,7 @@ def list_findings(
 ):
     query = (
         select(Finding)
+        .options(selectinload(Finding.status_history))
         .join(Project, Project.id == Finding.project_id)
         .where(
             Finding.deleted_at.is_(None),

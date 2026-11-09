@@ -246,8 +246,8 @@ export default function AdminFindings() {
                 <th className="px-5 py-2 font-medium">Assignee</th>
                 <th className="px-5 py-2 font-medium">Severity</th>
                 <th className="px-5 py-2 font-medium">Status</th>
-                <th className="px-5 py-2 font-medium">Created Date</th>
                 <th className="px-5 py-2 font-medium">Assigned Date</th>
+                <th className="px-5 py-2 font-medium">Accepted Date</th>
                 <th className="px-5 py-2 font-medium">Due Date</th>
               </tr>
             </thead>
@@ -338,11 +338,17 @@ export default function AdminFindings() {
                     </td>
 
                     <td className="px-5 py-2.5 text-gray-500 whitespace-nowrap">
-                      {createdDate}
+                      {finding.assignedDate
+                        ? (typeof finding.assignedDate === 'string' && finding.assignedDate.length > 10 && !isNaN(new Date(finding.assignedDate).getTime())
+                            ? new Date(finding.assignedDate).toLocaleDateString()
+                            : finding.assignedDate)
+                        : (createdDate || '—')}
                     </td>
 
                     <td className="px-5 py-2.5 text-gray-500 whitespace-nowrap">
-                      {finding.assignedDate || '—'}
+                      {finding.acceptedDate && !isNaN(new Date(finding.acceptedDate).getTime())
+                        ? new Date(finding.acceptedDate).toLocaleString()
+                        : 'Not accepted'}
                     </td>
 
                     <td

@@ -561,8 +561,12 @@ export default function UserFindingDetail() {
 
           <div className="info-grid finding-info">
             <div>
-              <span>Created Date</span>
-              <strong>{createdDate}</strong>
+              <span>Assigned Date</span>
+              <strong>
+                {finding.assignedDate && !isNaN(new Date(finding.assignedDate).getTime())
+                  ? new Date(finding.assignedDate).toLocaleString()
+                  : (createdDate || '—')}
+              </strong>
             </div>
 
             <div>

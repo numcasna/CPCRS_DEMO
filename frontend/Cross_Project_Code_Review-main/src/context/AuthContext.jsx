@@ -8,7 +8,14 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('user_profile')
-      return saved ? JSON.parse(saved) : null
+      if (!saved) return null
+      const parsed = JSON.parse(saved)
+      const uId = parsed.id || parsed.userId
+      if (uId && !parsed.avatar) {
+        const storedAvatar = localStorage.getItem(`user_avatar_${uId}`)
+        if (storedAvatar) parsed.avatar = storedAvatar
+      }
+      return parsed
     } catch {
       return null
     }
@@ -27,6 +34,7 @@ export function AuthProvider({ children }) {
 
     const user = result.user
     const role = String(user.role || '').toLowerCase()
+    const savedAvatar = user.avatar || localStorage.getItem(`user_avatar_${user.id}`) || null
 
     const profile = {
       ...user,
@@ -36,9 +44,15 @@ export function AuthProvider({ children }) {
       role: role === 'developer' ? 'user' : role,
       backendRole: role,
       color: '#8250df',
+      avatar: savedAvatar,
     }
 
     localStorage.setItem('user_profile', JSON.stringify(profile))
+    if (savedAvatar) {
+      try {
+        localStorage.setItem(`user_avatar_${user.id}`, savedAvatar)
+      } catch {}
+    }
     setCurrentUser(profile)
     return profile
   }
@@ -49,22 +63,64 @@ export function AuthProvider({ children }) {
     setCurrentUser(null)
   }
 
-  function updateProfilePicture(avatar) {
+  async function updateProfilePicture(avatar) {
+    const userId = currentUser?.id || currentUser?.userId
+
     setCurrentUser((prev) => {
       const next = prev ? { ...prev, avatar } : prev
       if (next) {
         try {
           localStorage.setItem('user_profile', JSON.stringify(next))
+          if (userId) {
+            localStorage.setItem(`user_avatar_${userId}`, avatar)
+          }
         } catch {}
       }
       return next
     })
+
+    try {
+      const res = await apiRequest('/auth/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ avatar }),
+      })
+      if (res?.avatar) {
+        setCurrentUser((prev) => {
+          const next = prev ? { ...prev, avatar: res.avatar } : prev
+          try {
+            localStorage.setItem('user_profile', JSON.stringify(next))
+            if (userId) {
+              localStorage.setItem(`user_avatar_${userId}`, res.avatar)
+            }
+          } catch {}
+          return next
+        })
+      }
+      return { ok: true, avatar: res?.avatar || avatar }
+    } catch (err) {
+      console.warn('Backend avatar save notice:', err)
+      return { ok: true, avatar }
+    }
   }
 
-  function changePassword() {
-    return {
-      ok: false,
-      message: 'Password changes are not connected to the backend yet.',
+  async function changePassword(currentPassword, newPassword) {
+    try {
+      const response = await apiRequest('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      })
+      return {
+        ok: true,
+        message: response?.message || 'Password changed successfully.',
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err.message || 'Could not change password.',
+      }
     }
   }
 

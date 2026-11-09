@@ -54,6 +54,23 @@ export default function FindingDetail() {
 
     try {
       const result = await apiRequest(`/findings/${id}`)
+      const assignedAt =
+        result.assigned_at ||
+        result.assignedDate ||
+        result.created_at ||
+        null
+      const acceptedAt =
+        result.accepted_at ||
+        result.acceptedDate ||
+        (result.status_history || []).find(
+          (h) =>
+            (h.new_status || h.status) === 'In Progress' ||
+            (h.new_status || h.status) === 'in_progress',
+        )?.changed_at ||
+        (['In Progress', 'in_progress', 'In Review', 'in_review', 'Resolved', 'resolved', 'Closed', 'closed'].includes(result.status)
+          ? (result.updated_at || result.created_at)
+          : null)
+
       setFinding({
         ...result,
         id: result.id,
@@ -67,8 +84,8 @@ export default function FindingDetail() {
         reviewer: result.reviewer_id,
         created: result.created_at,
         dueDate: result.due_date,
-        assignedDate: result.assigned_at || null,
-        acceptedDate: result.accepted_at || null,
+        assignedDate: assignedAt,
+        acceptedDate: acceptedAt,
         attachments: result.attachments || [],
       })
     } catch (err) {
@@ -497,15 +514,11 @@ export default function FindingDetail() {
 
           <div className="info-grid finding-info">
             <div>
-              <span>Created Date</span>
-              <strong>{formatDate(finding.created)}</strong>
-            </div>
-            <div>
               <span>Assigned Date</span>
               <strong>
                 {finding.assignedDate
                   ? formatDate(finding.assignedDate)
-                  : 'Not recorded'}
+                  : formatDate(finding.created)}
               </strong>
             </div>
             <div>
@@ -513,7 +526,7 @@ export default function FindingDetail() {
               <strong>
                 {finding.acceptedDate
                   ? formatDate(finding.acceptedDate)
-                  : 'Not recorded'}
+                  : 'Not accepted yet'}
               </strong>
             </div>
             <div>

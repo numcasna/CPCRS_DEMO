@@ -42,6 +42,11 @@ function normalizeFinding(finding) {
     reviewerId: finding.reviewer_id,
     reviewer: finding.reviewer_id,
     created: finding.created_at?.slice(0, 10) || today(),
+    assignedDate:
+      finding.assigned_at ||
+      finding.assignedDate ||
+      finding.created_at ||
+      (finding.created_at?.slice(0, 10) || today()),
     dueDate: finding.due_date,
     acceptedDate:
       finding.accepted_at ||

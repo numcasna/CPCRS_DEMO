@@ -1,5 +1,6 @@
 
 import enum
+from pathlib import Path
 import uuid
 from datetime import datetime, timezone
 
@@ -85,6 +86,14 @@ class User(Base):
     __table_args__ = (
         Index("uq_users_email_lower", func.lower(email), unique=True),
     )
+
+    @property
+    def avatar(self) -> str | None:
+        avatar_path = Path(__file__).resolve().parents[2] / "uploads" / "avatars" / f"{self.id}.png"
+        if avatar_path.exists():
+            mtime = int(avatar_path.stat().st_mtime)
+            return f"http://127.0.0.1:8000/auth/avatar/{self.id}?v={mtime}"
+        return None
 
 
 class Project(Base):
@@ -264,6 +273,31 @@ class Finding(Base):
         "FindingStatusHistory", back_populates="finding"
     )
     attachments = relationship("FindingAttachment", back_populates="finding")
+
+    @property
+    def assigned_at(self) -> datetime:
+        for history in reversed(self.status_history or []):
+            if history.reason and "Reassigned to" in history.reason:
+                return history.changed_at
+        return self.created_at
+
+    @property
+    def accepted_at(self) -> datetime | None:
+        for history in reversed(self.status_history or []):
+            if history.new_status in (
+                FindingStatus.in_progress,
+                "in_progress",
+                "In Progress",
+            ):
+                return history.changed_at
+        if self.status in (
+            FindingStatus.in_progress,
+            FindingStatus.in_review,
+            FindingStatus.resolved,
+            FindingStatus.closed,
+        ):
+            return self.updated_at or self.created_at
+        return None
 
 
 class FindingFeedback(Base):
