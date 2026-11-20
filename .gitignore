@@ -1,0 +1,42 @@
+
+# Python virtual environments
+venv/
+.venv/
+**/venv/
+**/.venv/
+
+# Python generated files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Local databases & uploads
+*.db
+*.sqlite3
+backend/code_review.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Frontend dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
